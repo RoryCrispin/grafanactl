@@ -78,7 +78,7 @@ func (w *Watcher) Watch() {
 
 				w.logger.Debug("event:", slog.Any("event", event))
 				if event.Has(fsnotify.Create) || event.Has(fsnotify.Write) {
-					w.logger.Debug("detected file change:", slog.String("file", event.Name), slog.String("op", event.Op.String()))
+					w.logger.Info("detected file change", slog.String("file", event.Name), slog.String("op", event.Op.String()))
 					w.callback(event.Name)
 				}
 			case err, ok := <-w.notifier.Errors:

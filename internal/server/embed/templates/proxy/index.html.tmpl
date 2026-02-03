@@ -18,11 +18,11 @@
         {{ range $resources.AsList }}
         <li>
             {{ if kindHasProxy $kind }}
-                <a href="/grafanactl/{{ .Group }}/{{ .Version }}/{{ .Kind }}/{{ .Name }}">
-                    {{ .Name }}
+                <a href="{{ proxyURL $kind .UID }}">
+                    {{ .Title }}
                 </a>
             {{ else }}
-                {{ .Name }}
+                {{ .Title }}
             {{ end }}
         </li>
         {{ end }}

@@ -17,6 +17,7 @@ package livereload
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -48,7 +49,13 @@ func Handler(upgrader *websocket.Upgrader) http.HandlerFunc {
 }
 
 func ReloadResource(r *resources.Resource) {
-	// TODO: use a resource ref in the URL instead of manually building a complex string
-	msg := fmt.Sprintf(`{"command": "reload", "path": "/grafanactl/%s/%s/%s"}`, r.APIVersion(), r.Kind(), r.Name())
+	// Send reload command. The path is informational for debugging.
+	// The client will reload the current page when it receives this message.
+	msg := fmt.Sprintf(`{"command": "reload", "path": "/d/%s/slug"}`, r.UID())
+	slog.Info("livereload: resource changed, triggering reload",
+		slog.String("resource", r.Name()),
+		slog.String("uid", r.UID()),
+		slog.String("kind", r.Kind()),
+	)
 	wsHub.broadcast <- []byte(msg)
 }

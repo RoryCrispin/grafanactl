@@ -16,7 +16,6 @@ import (
 	"github.com/grafana/grafanactl/internal/format"
 	"github.com/grafana/grafanactl/internal/httputils"
 	"github.com/grafana/grafanactl/internal/resources"
-	"github.com/grafana/grafanactl/internal/server/grafana"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -52,12 +51,12 @@ func (c *DashboardProxy) ProxyURL(uid string) string {
 	return fmt.Sprintf("/d/%s/slug", uid)
 }
 
-func (c *DashboardProxy) Endpoints(_ *httputil.ReverseProxy) []HTTPEndpoint {
+func (c *DashboardProxy) Endpoints(proxy *httputil.ReverseProxy) []HTTPEndpoint {
 	return []HTTPEndpoint{
 		{
 			Method:  http.MethodGet,
 			URL:     "/d/{uid}/{slug}",
-			Handler: grafana.AuthenticateAndProxyHandler(c.context),
+			Handler: proxy.ServeHTTP,
 		},
 		{
 			Method:  http.MethodGet,
@@ -101,7 +100,7 @@ func (c *DashboardProxy) dashboardJSONGetHandler() http.HandlerFunc {
 
 		accessConfig := map[string]any{
 			"slug":      "slug",
-			"url":       "/d/" + resource.Name() + "/slug",
+			"url":       "/d/" + resource.UID() + "/slug",
 			"canSave":   true,
 			"canEdit":   true,
 			"canAdmin":  false,
@@ -242,10 +241,10 @@ func (c *DashboardProxy) dashboardFromRequest(w http.ResponseWriter, r *http.Req
 		return nil
 	}
 
-	// TODO: kind + name isn't enough to unambiguously identify a resource
-	resource, found := c.resources.Find("Dashboard", name)
+	// Look up by UID first (spec.uid), then fall back to name (metadata.name)
+	resource, found := c.resources.FindByUID("Dashboard", name)
 	if !found {
-		httputils.Error(r, w, fmt.Sprintf("Dashboard with name %s not found", name), fmt.Errorf("dashboard with UID %s not found", name), http.StatusNotFound)
+		httputils.Error(r, w, fmt.Sprintf("Dashboard with UID %s not found", name), fmt.Errorf("dashboard with UID %s not found", name), http.StatusNotFound)
 		return nil
 	}
 

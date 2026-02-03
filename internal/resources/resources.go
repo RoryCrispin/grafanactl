@@ -107,6 +107,48 @@ func (r *Resource) Name() string {
 	return r.Raw.GetName()
 }
 
+// UID returns the Grafana UID of the resource from spec.uid.
+// Falls back to Name() if spec.uid is not present.
+func (r *Resource) UID() string {
+	spec, err := r.Raw.GetSpec()
+	if err != nil {
+		return r.Name()
+	}
+
+	specMap, ok := spec.(map[string]any)
+	if !ok {
+		return r.Name()
+	}
+
+	uid, ok := specMap["uid"].(string)
+	if !ok || uid == "" {
+		return r.Name()
+	}
+
+	return uid
+}
+
+// Title returns the title of the resource from spec.title.
+// Falls back to Name() if spec.title is not present.
+func (r *Resource) Title() string {
+	spec, err := r.Raw.GetSpec()
+	if err != nil {
+		return r.Name()
+	}
+
+	specMap, ok := spec.(map[string]any)
+	if !ok {
+		return r.Name()
+	}
+
+	title, ok := specMap["title"].(string)
+	if !ok || title == "" {
+		return r.Name()
+	}
+
+	return title
+}
+
 // Labels returns the labels of the resource.
 func (r *Resource) Labels() map[string]string {
 	return r.Raw.GetLabels()
@@ -259,6 +301,19 @@ func (r *Resources) Find(kind string, name string) (*Resource, bool) {
 	return nil, false
 }
 
+// FindByUID finds a resource by kind and UID (spec.uid).
+// Falls back to matching by name if UID is not found.
+func (r *Resources) FindByUID(kind string, uid string) (*Resource, bool) {
+	for _, resource := range r.collection {
+		if resource.Kind() == kind && resource.UID() == uid {
+			return resource, true
+		}
+	}
+
+	// Fallback to name match for resources without spec.uid
+	return r.Find(kind, uid)
+}
+
 // Merge merges another resources collection into the current one.
 func (r *Resources) Merge(resources *Resources) {
 	_ = resources.ForEach(func(resource *Resource) error {
@@ -300,7 +355,7 @@ func (r *Resources) Len() int {
 	return len(r.collection)
 }
 
-// AsList returns a list of resources from the collection.
+// AsList returns a list of resources from the collection, sorted by title.
 func (r *Resources) AsList() []*Resource {
 	if r.collection == nil {
 		return nil
@@ -310,6 +365,10 @@ func (r *Resources) AsList() []*Resource {
 	for _, resource := range r.collection {
 		list = append(list, resource)
 	}
+
+	slices.SortFunc(list, func(a, b *Resource) int {
+		return strings.Compare(strings.ToLower(a.Title()), strings.ToLower(b.Title()))
+	})
 
 	return list
 }
