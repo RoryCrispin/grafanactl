@@ -51,9 +51,10 @@ func Handler(upgrader *websocket.Upgrader) http.HandlerFunc {
 func ReloadResource(r *resources.Resource) {
 	// Send reload command. The path is informational for debugging.
 	// The client will reload the current page when it receives this message.
-	msg := fmt.Sprintf(`{"command": "reload", "path": "/d/%s/slug"}`, r.Name())
+	msg := fmt.Sprintf(`{"command": "reload", "path": "/d/%s/slug"}`, r.UID())
 	slog.Info("livereload: resource changed, triggering reload",
 		slog.String("resource", r.Name()),
+		slog.String("uid", r.UID()),
 		slog.String("kind", r.Kind()),
 	)
 	wsHub.broadcast <- []byte(msg)

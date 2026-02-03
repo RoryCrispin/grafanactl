@@ -18,7 +18,7 @@
         {{ range $resources.AsList }}
         <li>
             {{ if kindHasProxy $kind }}
-                <a href="{{ proxyURL $kind .Name }}">
+                <a href="{{ proxyURL $kind .UID }}">
                     {{ .Name }}
                 </a>
             {{ else }}
