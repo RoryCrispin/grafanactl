@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -75,6 +74,7 @@ func (s *Server) Start(ctx context.Context) error {
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Set("User-Agent", httputils.UserAgent)
 		},
+		ModifyResponse: newHTMLInjector(s.config.Port),
 	}
 
 	r := chi.NewRouter()
@@ -123,16 +123,9 @@ func (s *Server) Start(ctx context.Context) error {
 		CheckOrigin:     func(_ *http.Request) bool { return true },
 	}
 
-	livereload.Initialize()
 	r.Get("/livereload", livereload.Handler(upgrader))
 
-	s.resources.OnChange(func(resource *resources.Resource) {
-		logging.FromContext(ctx).Debug("Resource changed in memory", slog.String("component", "livereload"), slog.String("resource", string(resource.Ref())))
-		livereload.ReloadResource(resource)
-	})
-
 	r.Get("/", s.rootHandler)
-	r.Get("/grafanactl/{group}/{version}/{kind}/{name}", s.iframeHandler)
 	r.Handle("/grafanactl/assets/*", http.StripPrefix("/grafanactl/assets/", http.FileServer(http.FS(assetsFS))))
 
 	//nolint:gosec
@@ -159,6 +152,7 @@ func (s *Server) staticProxyConfig() handlers.StaticProxyConfig {
 		ProxyGet: []string{
 			"/public/*",
 			"/avatar/*",
+			"/api/live/ws",
 		},
 		MockGet: map[string]string{
 			"/api/ma/events":       "[]",
@@ -212,6 +206,14 @@ func (s *Server) rootHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return false
 		},
+		"proxyURL": func(kind, name string) string {
+			for _, handler := range s.resourceHandlers {
+				if handler.ResourceType().Kind == kind {
+					return s.subpath + handler.ProxyURL(name)
+				}
+			}
+			return ""
+		},
 	})
 
 	err := renderTemplate(w, "proxy/index.html.tmpl", templateVars)
@@ -226,42 +228,5 @@ func (s *Server) mockHandler(response string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		httputils.Write(r, w, []byte(response))
-	}
-}
-
-func (s *Server) iframeHandler(w http.ResponseWriter, r *http.Request) {
-	group := chi.URLParam(r, "group")
-	version := chi.URLParam(r, "version")
-	kind := chi.URLParam(r, "kind")
-	name := chi.URLParam(r, "name")
-
-	var handler handlers.ResourceHandler
-	for _, candidate := range s.resourceHandlers {
-		candidateResourceType := candidate.ResourceType()
-		groupVersion := candidateResourceType.GroupVersion
-
-		if candidateResourceType.Kind == kind &&
-			groupVersion.Group == group &&
-			(groupVersion.Version == version || groupVersion.Version == "") {
-			handler = candidate
-			break
-		}
-	}
-
-	msg := fmt.Sprintf("Could not find handler for group=%s, version=%s, kind=%s", group, version, kind)
-	if handler == nil {
-		httputils.Error(r, w, msg, errors.New(msg), http.StatusInternalServerError)
-		return
-	}
-
-	templateVars := map[string]any{
-		"IframeURL":      s.subpath + handler.ProxyURL(name),
-		"CurrentContext": s.context,
-		"Port":           s.config.Port,
-	}
-
-	if err := renderTemplate(w, "proxy/iframe.html.tmpl", templateVars); err != nil {
-		httputils.Error(r, w, "Error while executing template", err, http.StatusInternalServerError)
-		return
 	}
 }

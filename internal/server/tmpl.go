@@ -23,6 +23,9 @@ func init() {
 			"kindHasProxy": func(_ string) bool {
 				panic("kindHasProxy is not implemented")
 			},
+			"proxyURL": func(_, _ string) string {
+				panic("proxyURL is not implemented")
+			},
 		})
 
 	templates = template.Must(findAndParseTemplates(embedFS, base, "embed/templates"))

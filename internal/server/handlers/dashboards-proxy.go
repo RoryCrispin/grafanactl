@@ -16,7 +16,6 @@ import (
 	"github.com/grafana/grafanactl/internal/format"
 	"github.com/grafana/grafanactl/internal/httputils"
 	"github.com/grafana/grafanactl/internal/resources"
-	"github.com/grafana/grafanactl/internal/server/grafana"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -52,12 +51,12 @@ func (c *DashboardProxy) ProxyURL(uid string) string {
 	return fmt.Sprintf("/d/%s/slug", uid)
 }
 
-func (c *DashboardProxy) Endpoints(_ *httputil.ReverseProxy) []HTTPEndpoint {
+func (c *DashboardProxy) Endpoints(proxy *httputil.ReverseProxy) []HTTPEndpoint {
 	return []HTTPEndpoint{
 		{
 			Method:  http.MethodGet,
 			URL:     "/d/{uid}/{slug}",
-			Handler: grafana.AuthenticateAndProxyHandler(c.context),
+			Handler: proxy.ServeHTTP,
 		},
 		{
 			Method:  http.MethodGet,

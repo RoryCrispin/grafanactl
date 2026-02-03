@@ -12,9 +12,10 @@
 // limitations under the License.
 //
 // Original file:  https://github.com/gohugoio/hugo/blob/89bd025ebfd2c559039826641702941fc35a7fdb/livereload/hub.go
-// No changes were made.
 
 package livereload
+
+import "log/slog"
 
 type hub struct {
 	// Registered connections.
@@ -43,10 +44,13 @@ func (h *hub) run() {
 		select {
 		case c := <-h.register:
 			h.connections[c] = true
+			slog.Info("livereload: client connected", slog.Int("total_connections", len(h.connections)))
 		case c := <-h.unregister:
 			delete(h.connections, c)
 			c.close()
+			slog.Info("livereload: client disconnected", slog.Int("total_connections", len(h.connections)))
 		case m := <-h.broadcast:
+			slog.Info("livereload: broadcasting reload", slog.String("message", string(m)), slog.Int("connections", len(h.connections)))
 			for c := range h.connections {
 				select {
 				case c.send <- m:
