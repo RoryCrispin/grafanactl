@@ -128,6 +128,27 @@ func (r *Resource) UID() string {
 	return uid
 }
 
+// Title returns the title of the resource from spec.title.
+// Falls back to Name() if spec.title is not present.
+func (r *Resource) Title() string {
+	spec, err := r.Raw.GetSpec()
+	if err != nil {
+		return r.Name()
+	}
+
+	specMap, ok := spec.(map[string]any)
+	if !ok {
+		return r.Name()
+	}
+
+	title, ok := specMap["title"].(string)
+	if !ok || title == "" {
+		return r.Name()
+	}
+
+	return title
+}
+
 // Labels returns the labels of the resource.
 func (r *Resource) Labels() map[string]string {
 	return r.Raw.GetLabels()
@@ -334,7 +355,7 @@ func (r *Resources) Len() int {
 	return len(r.collection)
 }
 
-// AsList returns a list of resources from the collection.
+// AsList returns a list of resources from the collection, sorted by title.
 func (r *Resources) AsList() []*Resource {
 	if r.collection == nil {
 		return nil
@@ -344,6 +365,10 @@ func (r *Resources) AsList() []*Resource {
 	for _, resource := range r.collection {
 		list = append(list, resource)
 	}
+
+	slices.SortFunc(list, func(a, b *Resource) int {
+		return strings.Compare(strings.ToLower(a.Title()), strings.ToLower(b.Title()))
+	})
 
 	return list
 }

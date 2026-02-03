@@ -19,10 +19,10 @@
         <li>
             {{ if kindHasProxy $kind }}
                 <a href="{{ proxyURL $kind .UID }}">
-                    {{ .Name }}
+                    {{ .Title }}
                 </a>
             {{ else }}
-                {{ .Name }}
+                {{ .Title }}
             {{ end }}
         </li>
         {{ end }}
