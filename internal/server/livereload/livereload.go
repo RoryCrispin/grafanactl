@@ -19,15 +19,26 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/grafana/grafanactl/internal/resources"
 )
 
+const reloadDebounceWindow = 200 * time.Millisecond
+const reloadQueueSize = 128
+
+var reloadLoopOnce sync.Once
+var reloadQueue = make(chan *resources.Resource, reloadQueueSize)
+
 // Initialize starts the Websocket Hub handling live reloads.
 // Original: https://github.com/gohugoio/hugo/blob/89bd025ebfd2c559039826641702941fc35a7fdb/livereload/livereload.go#L107
 func Initialize() {
 	go wsHub.run()
+	reloadLoopOnce.Do(func() {
+		go reloadLoop()
+	})
 }
 
 // Handler is a HandlerFunc handling the livereload
@@ -49,13 +60,68 @@ func Handler(upgrader *websocket.Upgrader) http.HandlerFunc {
 }
 
 func ReloadResource(r *resources.Resource) {
+	select {
+	case reloadQueue <- r:
+	default:
+		// If we're already backed up, we can safely drop since a reload is pending.
+	}
+}
+
+func reloadLoop() {
+	var (
+		timer       *time.Timer
+		pending     bool
+		pendingLast *resources.Resource
+		pendingN    int
+	)
+
+	for {
+		if !pending {
+			r := <-reloadQueue
+			pending = true
+			pendingLast = r
+			pendingN = 1
+			timer = time.NewTimer(reloadDebounceWindow)
+			continue
+		}
+
+		select {
+		case r := <-reloadQueue:
+			pendingLast = r
+			pendingN++
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(reloadDebounceWindow)
+		case <-timer.C:
+			triggerReload(pendingLast, pendingN)
+			pending = false
+			pendingLast = nil
+			pendingN = 0
+		}
+	}
+}
+
+func triggerReload(r *resources.Resource, n int) {
 	// Send reload command. The path is informational for debugging.
 	// The client will reload the current page when it receives this message.
 	msg := fmt.Sprintf(`{"command": "reload", "path": "/d/%s/slug"}`, r.UID())
-	slog.Info("livereload: resource changed, triggering reload",
-		slog.String("resource", r.Name()),
-		slog.String("uid", r.UID()),
-		slog.String("kind", r.Kind()),
-	)
+	if n > 1 {
+		slog.Info("livereload: coalesced resource changes, triggering reload",
+			slog.Int("changes", n),
+			slog.String("resource", r.Name()),
+			slog.String("uid", r.UID()),
+			slog.String("kind", r.Kind()),
+		)
+	} else {
+		slog.Info("livereload: resource changed, triggering reload",
+			slog.String("resource", r.Name()),
+			slog.String("uid", r.UID()),
+			slog.String("kind", r.Kind()),
+		)
+	}
 	wsHub.broadcast <- []byte(msg)
 }
